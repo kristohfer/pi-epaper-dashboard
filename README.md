@@ -57,4 +57,4 @@ sudo systemctl enable --now rotating-dashboard.service
 ## 🛠️ Credits & Acknowledgements
 - **Hardware & System Architecture:** Built, configured, and deployed by [@kristohfer](https://github.com/kristohfer).
 - **Code Assistance:** Developed with AI collaboration (Gemini) for python scripting, systemd automation, and refactoring.
-- **Libraries & Services:** [Waveshare e-Paper](https://github.com/waveshare/e-Paper), [Tailscale](https://tailscale.com/), and `wttr.in`.
+- **Libraries & Services:** [Waveshare e-Paper](https://github.com/waveshare/e-Paper), [Tailscale](https://tailscale.com/), and [wttr.in](https://github.com/chubin/wttr.in)
