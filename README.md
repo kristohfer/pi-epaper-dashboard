@@ -2,6 +2,12 @@
 
 A low-power, feature-rich e-paper dashboard built for a **Raspberry Pi Zero** and a **Waveshare 2.13" V4 e-Paper display**. It rotates through live system metrics, Tailscale mesh status, local weather, and dynamic AI-generated prompts powered by a local `llama.cpp` instance.
 
+<p align="center">
+  <img src="piDashboard.png" alt="Pi Zero E-Paper Dashboard Collage" width="700"/>
+  <br>
+  <em>Dashboard Collage: Mesh Routes, System Vitals, Weather/Time, and AI Muse.</em>
+</p>
+
 ## Features
 - 🖥️ **Host Vitals:** Real-time CPU, RAM, disk usage, temperature, and uptime tracking via Node Exporter.
 - 🌐 **Tailscale Mesh Status:** Live view of node connectivity and P2P routing across your tailnet.
