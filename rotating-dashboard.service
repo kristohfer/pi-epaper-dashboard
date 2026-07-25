@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi Zero E-Paper Rotating Dashboard
+After=network.target tailscaled.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/pi-epaper-dashboard
+ExecStart=/usr/bin/python3 /home/pi/pi-epaper-dashboard/rotating_dashboard.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+#Note: Adjust pi to zero if your username on the Pi is zero, and change paths to match your actual home directory
