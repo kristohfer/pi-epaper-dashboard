@@ -54,6 +54,39 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now rotating-dashboard.service
 ```
 
+## Web UI & Homarr Integration
+
+The dashboard includes a lightweight, background-threaded Flask web server, allowing you to mirror your e-paper display live onto dashboard tools like **Homarr** via an iFrame widget.
+
+### 1. Install Dependencies
+Run this command on your Raspberry Pi to install Flask:
+```bash
+pip install flask
+```
+
+### 2. Secure Configuration
+To prevent unauthorized local network access, the web UI uses token-based authentication. 
+
+1. Generate a secure random token in your terminal:
+   ```bash
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+2. Add your generated token to your active `config.py`:
+   ```python
+   WEB_TOKEN = "your_generated_token_here"
+   ```
+3. Add a placeholder to your `config_example.py` template for version control:
+   ```python
+   WEB_TOKEN = "your_super_secret_token_here"
+   ```
+
+### 3. Homarr iFrame Setup
+1. In your Homarr dashboard, add an **iFrame** widget.
+2. Point the widget URL to your Pi Zero's IP address with your secret token attached:
+   ```text
+   http://<YOUR_PI_IP>:5000/?token=your_generated_token_here
+   ```
+
 ## 🛠️ Credits & Acknowledgements
 - **Hardware & System Architecture:** Built, configured, and deployed by [@kristohfer](https://github.com/kristohfer).
 - **Code Assistance:** Developed with AI collaboration (Gemini) for python scripting, systemd automation, and refactoring.
