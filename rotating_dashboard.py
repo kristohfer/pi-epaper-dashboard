@@ -114,11 +114,6 @@ def web_dashboard():
                     <p><b>Humidity:</b> {{ state.weather.humidity }} | <b>Wind:</b> {{ state.weather.wind }}</p>
                 </div>
 
-                <div class="card">
-                    <h3>AI Muse ({{ state.ai_theme }})</h3>
-                    <p style="font-style: italic;">"{{ state.ai_quote }}"</p>
-                </div>
-
                 <div class="timestamp">Last Synced: {{ state.last_updated }}</div>
             </body>
         </html>
@@ -456,8 +451,16 @@ def main():
         while True:
             current_hour = datetime.now().hour
             if ENABLE_NIGHT_SLEEP and (current_hour >= NIGHT_START_HOUR or current_hour < NIGHT_END_HOUR):
-                web_state["current_view"] = "Night Mode (Sleeping)"
-                time.sleep(300)
+                # Night mode: Keep updating web UI data in the background, but do not touch the e-paper
+                web_state["current_view"] = "Night Mode (Display Sleeping)"
+                
+                # Refresh data so Homarr still shows live metrics through the night
+                web_state["vitals"] = get_cubi_vitals()
+                web_state["weather"] = get_weather()
+                web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
+                
+                # Wait 60 seconds before refreshing background web data again
+                time.sleep(60)
                 continue
 
             render_vitals_view(epd, 0, views_count, mode="full")
