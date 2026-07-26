@@ -2,3 +2,4 @@ Pillow>=9.0.0
 requests>=2.25.0
 spidev>=3.5
 RPi.GPIO>=0.7.0
+Flask>=2.0.0
