@@ -75,10 +75,6 @@ To prevent unauthorized local network access, the web UI uses token-based authen
    ```python
    WEB_TOKEN = "your_generated_token_here"
    ```
-3. Add a placeholder to your `config_example.py` template for version control:
-   ```python
-   WEB_TOKEN = "your_super_secret_token_here"
-   ```
 
 ### 3. Homarr iFrame Setup
 1. In your Homarr dashboard, add an **iFrame** widget.
