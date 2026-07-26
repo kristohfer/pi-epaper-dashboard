@@ -8,6 +8,8 @@ import requests
 import textwrap
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+from flask import Flask, render_template_string, request, abort
+import threading
 
 # Import configuration safely (loads local config.py or falls back to template)
 try:
@@ -20,6 +22,7 @@ NODE_EXPORTER_PORT = config.NODE_EXPORTER_PORT
 LLAMA_PORT = config.LLAMA_PORT
 API_KEY = config.API_KEY
 LOCATION = config.LOCATION
+WEB_TOKEN = getattr(config, 'WEB_TOKEN', 'changeme_in_config')
 
 # Add Waveshare library path
 libdir = os.path.expanduser('~/e-Paper/RaspberryPi_JetsonNano/python/lib')
@@ -57,6 +60,77 @@ AI_PERSONAS = [
         "prompt": "Give a witty quote on why laziness drives good automation. Under 12 words."
     }
 ]
+
+# --- SECURE WEB UI SETUP (Homarr iFrame Integration) ---
+app = Flask(__name__)
+
+web_state = {
+    "current_view": "Initializing...",
+    "vitals": {"cpu": 0, "ram": 0, "temp": 0, "disk_pct": 0, "uptime": "N/A", "online": False},
+    "weather": {"temp": "--°F", "cond": "Unavailable", "humidity": "--", "wind": "--"},
+    "ai_theme": "None",
+    "ai_quote": "Waiting for briefing...",
+    "last_updated": "Never"
+}
+
+@app.before_request
+def security_check():
+    # Require ?token=XYZ for all web requests to block unauthorized local network scanning
+    token = request.args.get('token', '')
+    if token != WEB_TOKEN:
+        abort(403)
+
+@app.route("/")
+def web_dashboard():
+    return render_template_string("""
+        <html>
+            <head>
+                <meta http-equiv="refresh" content="10">
+                <style>
+                    body { background: #121212; color: #e0e0e0; font-family: monospace; padding: 15px; margin: 0; }
+                    .card { background: #1e1e1e; border: 1px solid #333; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+                    h2 { color: #4CAF50; margin-top: 0; font-size: 1.1em; text-transform: uppercase; }
+                    h3 { color: #90CAF9; margin: 0 0 8px 0; font-size: 0.95em; }
+                    p { margin: 4px 0; font-size: 0.85em; }
+                    .timestamp { font-size: 0.75em; color: #777; margin-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <h2>Pi E-Paper Dashboard // {{ state.current_view }}</h2>
+                
+                <div class="card">
+                    <h3>Cubi 5 Vitals</h3>
+                    {% if state.vitals.online %}
+                        <p><b>CPU:</b> {{ state.vitals.cpu }}% | <b>RAM:</b> {{ state.vitals.ram }}% | <b>Temp:</b> {{ state.vitals.temp }}°F</p>
+                        <p><b>Disk:</b> {{ state.vitals.disk_pct }}% | <b>Uptime:</b> {{ state.vitals.uptime }}</p>
+                    {% else %}
+                        <p style="color: #f44336;">Status: Offline / Unreachable</p>
+                    {% endif %}
+                </div>
+
+                <div class="card">
+                    <h3>Weather ({{ LOCATION }})</h3>
+                    <p>{{ state.weather.temp }} - {{ state.weather.cond }}</p>
+                    <p><b>Humidity:</b> {{ state.weather.humidity }} | <b>Wind:</b> {{ state.weather.wind }}</p>
+                </div>
+
+                <div class="card">
+                    <h3>AI Muse ({{ state.ai_theme }})</h3>
+                    <p style="font-style: italic;">"{{ state.ai_quote }}"</p>
+                </div>
+
+                <div class="timestamp">Last Synced: {{ state.last_updated }}</div>
+            </body>
+        </html>
+    """, state=web_state, LOCATION=LOCATION)
+
+def run_web_server():
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+
+# Start background web thread
+web_thread = threading.Thread(target=run_web_server, daemon=True)
+web_thread.start()
+
 
 # --- GLOBAL FONT CACHE ---
 def load_fonts():
@@ -271,6 +345,10 @@ def render_vitals_view(epd, view_index, total_views, mode="full"):
     image, draw, width, height = create_base_frame(epd, "Cubi 5 Vitals", view_index, total_views)
     vitals = get_cubi_vitals()
     
+    web_state["current_view"] = "Cubi 5 Vitals"
+    web_state["vitals"] = vitals
+    web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
+    
     if not vitals["online"]:
         draw.text((10, 30), f"Cubi 5 ({CUBI_IP})", fill=0, font=FONTS["bold"])
         draw.text((10, 50), "STATUS: UNREACHABLE / OFF", fill=0, font=FONTS["body"])
@@ -302,6 +380,9 @@ def render_mesh_status_view(epd, view_index, total_views):
     image, draw, width, height = create_base_frame(epd, "Mesh Routes", view_index, total_views)
     devices = get_mesh_devices_status()
     
+    web_state["current_view"] = "Mesh Routes"
+    web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
+    
     draw.text((10, 21), "Node Routing Status:", fill=0, font=FONTS["bold"])
     col1, col2 = devices[:4], devices[4:8]
     
@@ -328,6 +409,11 @@ def render_weather_view(epd, view_index, total_views):
     draw.line([(10, 44), (width - 10, 44)], fill=0, width=1)
 
     weather = get_weather()
+    
+    web_state["current_view"] = "Weather & Time"
+    web_state["weather"] = weather
+    web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
+
     draw.text((10, 49), f"{LOCATION}: {weather['temp']} - {weather['cond']}", fill=0, font=FONTS["bold"])
     draw.text((10, 64), f"Humidity: {weather['humidity']}  |  Wind: {weather['wind']}", fill=0, font=FONTS["body"])
 
@@ -339,6 +425,11 @@ def render_ai_view(epd, view_index, total_views):
     epd.init()
     image, draw, width, height = create_base_frame(epd, "AI Muse", view_index, total_views)
     theme, quote, tokens = get_ai_briefing()
+    
+    web_state["current_view"] = "AI Muse"
+    web_state["ai_theme"] = theme
+    web_state["ai_quote"] = quote
+    web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
     
     draw.rectangle([10, 22, 132, 34], fill=0)
     draw.text((14, 23), f"THEME: {theme}", fill=255, font=FONTS["small_bold"])
@@ -365,6 +456,7 @@ def main():
         while True:
             current_hour = datetime.now().hour
             if ENABLE_NIGHT_SLEEP and (current_hour >= NIGHT_START_HOUR or current_hour < NIGHT_END_HOUR):
+                web_state["current_view"] = "Night Mode (Sleeping)"
                 time.sleep(300)
                 continue
 
