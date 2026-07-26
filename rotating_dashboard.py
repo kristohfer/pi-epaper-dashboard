@@ -31,7 +31,7 @@ from waveshare_epd import epd2in13_V4
 # Preferences
 VIEW_DURATION = 20
 ENABLE_NIGHT_SLEEP = True
-NIGHT_START_HOUR = 0
+NIGHT_START_HOUR = 22
 NIGHT_END_HOUR = 6
 
 # AI Muse Personas & Themes
@@ -364,7 +364,7 @@ def main():
     try:
         while True:
             current_hour = datetime.now().hour
-            if ENABLE_NIGHT_SLEEP and (NIGHT_START_HOUR <= current_hour < NIGHT_END_HOUR):
+            if ENABLE_NIGHT_SLEEP and (current_hour >= NIGHT_START_HOUR or current_hour < NIGHT_END_HOUR):
                 time.sleep(300)
                 continue
 
