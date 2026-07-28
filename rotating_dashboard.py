@@ -439,6 +439,15 @@ def render_ai_view(epd, view_index, total_views):
 
 # --- MAIN LOOP ---
 
+def interruptible_sleep(duration_seconds):
+    """Sleeps in 1-second increments so night mode can trigger instantly."""
+    for _ in range(duration_seconds):
+        current_hour = datetime.now().hour
+        if ENABLE_NIGHT_SLEEP and (current_hour >= NIGHT_START_HOUR or current_hour < NIGHT_END_HOUR):
+            return True  # Signal to enter night mode immediately
+        time.sleep(1)
+    return False
+
 def main():
     epd = epd2in13_V4.EPD()
     views_count = 4
@@ -454,28 +463,40 @@ def main():
                 # Night mode: Keep updating web UI data in the background, but do not touch the e-paper
                 web_state["current_view"] = "Night Mode (Display Sleeping)"
                 
+                # Ensure hardware e-paper is put to sleep cleanly on transition
+                try:
+                    epd.init()
+                    epd.sleep()
+                except Exception:
+                    pass
+
                 # Refresh data so Homarr still shows live metrics through the night
                 web_state["vitals"] = get_cubi_vitals()
                 web_state["weather"] = get_weather()
                 web_state["last_updated"] = datetime.now().strftime("%I:%M:%S %p")
                 
-                # Wait 60 seconds before refreshing background web data again
                 time.sleep(60)
                 continue
 
+            # View 1: Vitals (Full)
             render_vitals_view(epd, 0, views_count, mode="full")
-            time.sleep(10)
+            if interruptible_sleep(10): continue
+
+            # View 1: Vitals (Partial)
             render_vitals_view(epd, 0, views_count, mode="partial")
-            time.sleep(10)
+            if interruptible_sleep(10): continue
 
+            # View 2: Mesh Status
             render_mesh_status_view(epd, 1, views_count)
-            time.sleep(VIEW_DURATION)
+            if interruptible_sleep(VIEW_DURATION): continue
 
+            # View 3: Weather
             render_weather_view(epd, 2, views_count)
-            time.sleep(VIEW_DURATION)
+            if interruptible_sleep(VIEW_DURATION): continue
 
+            # View 4: AI Muse (Includes slow API call)
             render_ai_view(epd, 3, views_count)
-            time.sleep(VIEW_DURATION)
+            if interruptible_sleep(VIEW_DURATION): continue
 
     except KeyboardInterrupt:
         epd.init()
