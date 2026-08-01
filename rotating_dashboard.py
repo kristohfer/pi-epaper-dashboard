@@ -6,10 +6,21 @@ import random
 import subprocess
 import requests
 import textwrap
+import logging
+import hmac
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from flask import Flask, render_template_string, request, abort
 import threading
+
+try:
+    from waitress import serve as waitress_serve
+    HAS_WAITRESS = True
+except ImportError:
+    HAS_WAITRESS = False
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger("dashboard")
 
 # Import configuration safely (loads local config.py or falls back to template)
 try:
@@ -34,7 +45,7 @@ from waveshare_epd import epd2in13_V4
 # Preferences
 VIEW_DURATION = 20
 ENABLE_NIGHT_SLEEP = True
-NIGHT_START_HOUR = 22
+NIGHT_START_HOUR = 23
 NIGHT_END_HOUR = 6
 
 # AI Muse Personas & Themes
@@ -77,7 +88,7 @@ web_state = {
 def security_check():
     # Require ?token=XYZ for all web requests to block unauthorized local network scanning
     token = request.args.get('token', '')
-    if token != WEB_TOKEN:
+    if not hmac.compare_digest(token, WEB_TOKEN):
         abort(403)
 
 @app.route("/")
@@ -120,7 +131,11 @@ def web_dashboard():
     """, state=web_state, LOCATION=LOCATION)
 
 def run_web_server():
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    if HAS_WAITRESS:
+        waitress_serve(app, host="0.0.0.0", port=5000, threads=4)
+    else:
+        logger.warning("waitress not installed (pip install waitress) - falling back to Flask's dev server")
+        app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
 
 # Start background web thread
 web_thread = threading.Thread(target=run_web_server, daemon=True)
@@ -208,7 +223,7 @@ def get_cubi_vitals():
                 vitals["disk_pct"] = int((used / disk_total) * 100)
             if temps_c: vitals["temp"] = int((max(temps_c) * 9 / 5) + 32)
     except Exception as e:
-        print(f"Cubi 5 metrics fetch error: {e}")
+        logger.warning(f"Cubi 5 metrics fetch error: {e}")
         vitals["online"] = True
     return vitals
 
@@ -252,7 +267,7 @@ def get_mesh_devices_status():
             devices.append(f"• {short_name} [{status_str}]")
             if len(devices) >= 8: break
     except Exception as e:
-        print(f"Tailscale JSON status failed: {e}")
+        logger.warning(f"Tailscale JSON status failed: {e}")
         devices = [
             "• Node Offline",
             "• Check Service",
@@ -268,7 +283,7 @@ def get_weather():
             parts = [p.strip() for p in res.text.split("|")]
             return {"temp": parts[0].replace("+", ""), "cond": parts[1], "humidity": parts[2], "wind": parts[3]}
     except Exception as e:
-        print(f"Weather fetch failed: {e}")
+        logger.warning(f"Weather fetch failed: {e}")
     return {"temp": "--°F", "cond": "Unavailable", "humidity": "--", "wind": "--"}
 
 def get_ai_briefing():
@@ -298,7 +313,7 @@ def get_ai_briefing():
             tokens = usage.get('completion_tokens', usage.get('total_tokens', 12))
             return persona["theme"], text.replace('"', ''), tokens
     except Exception as e:
-        print(f"AI Briefing fetch error: {e}")
+        logger.warning(f"AI Briefing fetch error: {e}")
     
     return persona["theme"], "AI Muse offline.", 0
 
@@ -467,8 +482,8 @@ def main():
                 try:
                     epd.init()
                     epd.sleep()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Night-mode sleep transition failed: {e}")
 
                 # Refresh data so Homarr still shows live metrics through the night
                 web_state["vitals"] = get_cubi_vitals()
@@ -479,23 +494,38 @@ def main():
                 continue
 
             # View 1: Vitals (Full)
-            render_vitals_view(epd, 0, views_count, mode="full")
+            try:
+                render_vitals_view(epd, 0, views_count, mode="full")
+            except Exception as e:
+                logger.error(f"Vitals (full) render failed: {e}", exc_info=True)
             if interruptible_sleep(10): continue
 
             # View 1: Vitals (Partial)
-            render_vitals_view(epd, 0, views_count, mode="partial")
+            try:
+                render_vitals_view(epd, 0, views_count, mode="partial")
+            except Exception as e:
+                logger.error(f"Vitals (partial) render failed: {e}", exc_info=True)
             if interruptible_sleep(10): continue
 
             # View 2: Mesh Status
-            render_mesh_status_view(epd, 1, views_count)
+            try:
+                render_mesh_status_view(epd, 1, views_count)
+            except Exception as e:
+                logger.error(f"Mesh status render failed: {e}", exc_info=True)
             if interruptible_sleep(VIEW_DURATION): continue
 
             # View 3: Weather
-            render_weather_view(epd, 2, views_count)
+            try:
+                render_weather_view(epd, 2, views_count)
+            except Exception as e:
+                logger.error(f"Weather render failed: {e}", exc_info=True)
             if interruptible_sleep(VIEW_DURATION): continue
 
             # View 4: AI Muse (Includes slow API call)
-            render_ai_view(epd, 3, views_count)
+            try:
+                render_ai_view(epd, 3, views_count)
+            except Exception as e:
+                logger.error(f"AI Muse render failed: {e}", exc_info=True)
             if interruptible_sleep(VIEW_DURATION): continue
 
     except KeyboardInterrupt:
